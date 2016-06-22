@@ -1,10 +1,10 @@
 package slog
 
 import (
-	"log"
-	"strings"
-	"os"
 	"fmt"
+	"log"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,18 +20,18 @@ const (
 )
 
 var levelName = map[string]LogLevel{
-	"FATAL":FATAL,
-	"ERROR":ERROR,
-	"WARN":WARN,
-	"INFO":INFO,
-	"DEBUG":DEBUG,
+	"FATAL": FATAL,
+	"ERROR": ERROR,
+	"WARN":  WARN,
+	"INFO":  INFO,
+	"DEBUG": DEBUG,
 }
 
 var (
 	maxLogLevel = DEBUG
-	logflag = log.LstdFlags | log.Lshortfile
-	logout *log.Logger
-	logAccess *AccessLog
+	logflag     = log.LstdFlags | log.Lshortfile
+	logout      *log.Logger
+	logAccess   *AccessLog
 )
 
 // request 按天分割日志
@@ -48,7 +48,7 @@ func init() {
 }
 
 func SetLogfile(outfile string) {
-	fileWriter, err := os.OpenFile(outfile, os.O_CREATE | os.O_WRONLY | os.O_APPEND, 0660)
+	fileWriter, err := os.OpenFile(outfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
 	if err != nil {
 		Fatal(outfile, err)
 	}
@@ -60,9 +60,9 @@ func SetRequestfile(requestfile string) {
 	dateFormat := "2006-01-02"
 	requestWriter := createRequestlogger(requestfile)
 	logAccess = &AccessLog{
-		logfile:requestfile,
-		fd:requestWriter,
-		oldDate:time.Now().Format(dateFormat),
+		logfile: requestfile,
+		fd:      requestWriter,
+		oldDate: time.Now().Format(dateFormat),
 	}
 	logAccess.access = log.New(logAccess.fd, "", log.LstdFlags)
 
@@ -75,7 +75,7 @@ func SetRequestfile(requestfile string) {
 				logAccess.lock.Lock()
 				logAccess.oldDate = nowDate
 				logAccess.fd.Close()
-				err := os.Rename(requestfile, requestfile + nowDate)
+				err := os.Rename(requestfile, requestfile+nowDate)
 				if err != nil {
 					Error(err)
 				}
@@ -90,7 +90,7 @@ func SetRequestfile(requestfile string) {
 }
 
 func createRequestlogger(requestfile string) *os.File {
-	requestWriter, err := os.OpenFile(requestfile, os.O_CREATE | os.O_WRONLY | os.O_APPEND, 0660)
+	requestWriter, err := os.OpenFile(requestfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
 	if err != nil {
 		Fatal(requestfile, err)
 	}
@@ -195,7 +195,7 @@ func Access(args ...interface{}) {
 }
 
 func output(mode, msg string) {
-	logout.Output(3, "[" + mode + "] " + msg)
+	logout.Output(3, "["+mode+"] "+msg)
 }
 
 func outputRequest(msg string) {
