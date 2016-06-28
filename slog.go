@@ -31,7 +31,8 @@ var (
 	maxLogLevel = DEBUG
 	logflag     = log.LstdFlags | log.Lshortfile
 	logout      *log.Logger
-	logAccess   *AccessLog
+	logAccess   = make(map[string]*AccessLog)
+	dateFormat  = "2006-01-02"
 )
 
 // request 按天分割日志
@@ -40,7 +41,7 @@ type AccessLog struct {
 	oldDate string
 	logfile string
 	fd      *os.File
-	access  *log.Logger
+	logger  *log.Logger
 }
 
 func init() {
@@ -55,44 +56,22 @@ func SetLogfile(outfile string) {
 	logout = log.New(fileWriter, "", logflag)
 }
 
-// 设置request对象
-func SetRequestfile(requestfile string) {
-	dateFormat := "2006-01-02"
-	requestWriter := createRequestlogger(requestfile)
-	logAccess = &AccessLog{
-		logfile: requestfile,
-		fd:      requestWriter,
+// 设置Access对象
+func SetAccessFile(name, accessFile string) {
+	accessWriter := createAccessLogger(accessFile)
+	access := &AccessLog{
+		logfile: accessFile,
+		fd:      accessWriter,
 		oldDate: time.Now().Format(dateFormat),
 	}
-	logAccess.access = log.New(logAccess.fd, "", log.LstdFlags)
-
-	//异步切割日志
-	go func() {
-		ticker := time.NewTicker(time.Minute * 3)
-		for range ticker.C {
-			nowDate := time.Now().Format(dateFormat)
-			if logAccess.oldDate != nowDate {
-				logAccess.lock.Lock()
-				logAccess.oldDate = nowDate
-				logAccess.fd.Close()
-				err := os.Rename(requestfile, requestfile+nowDate)
-				if err != nil {
-					Error(err)
-				}
-				requestWriter := createRequestlogger(requestfile)
-				logAccess.fd = requestWriter
-				logAccess.access = log.New(logAccess.fd, "", log.LstdFlags)
-				logAccess.lock.Unlock()
-			}
-		}
-	}()
-
+	access.logger = log.New(accessWriter, "", log.LstdFlags)
+	logAccess[name] = access
 }
 
-func createRequestlogger(requestfile string) *os.File {
-	requestWriter, err := os.OpenFile(requestfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
+func createAccessLogger(accessFile string) *os.File {
+	requestWriter, err := os.OpenFile(accessFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
 	if err != nil {
-		Fatal(requestfile, err)
+		Fatal(accessFile, err)
 	}
 	return requestWriter
 }
@@ -187,17 +166,37 @@ func Debugf(msg string, args ...interface{}) {
 	output("DEBUG", fmt.Sprintf(msg, args...))
 }
 
-func Access(args ...interface{}) {
-	if logAccess == nil {
+func Access(name string, args ...interface{}) {
+	var (
+		access *AccessLog
+		ok     bool
+	)
+	if access, ok = logAccess[name]; !ok {
 		return
 	}
-	outputRequest(fmt.Sprint(args...))
+
+	outputAccess(access, fmt.Sprint(args...))
 }
 
 func output(mode, msg string) {
 	logout.Output(3, "["+mode+"] "+msg)
 }
 
-func outputRequest(msg string) {
-	logAccess.access.Output(3, msg)
+func outputAccess(access *AccessLog, msg string) {
+	nowDate := time.Now().Format(dateFormat)
+	if access.oldDate != nowDate {
+		access.lock.Lock()
+		access.oldDate = nowDate
+		access.fd.Close()
+		err := os.Rename(access.logfile, access.logfile+nowDate)
+		if err != nil {
+			Error(err)
+		}
+		requestWriter := createAccessLogger(access.logfile)
+		access.fd = requestWriter
+		access.logger = log.New(requestWriter, "", log.LstdFlags)
+		access.lock.Unlock()
+	}
+
+	access.logger.Output(3, msg)
 }
