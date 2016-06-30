@@ -186,6 +186,7 @@ func outputAccess(access *AccessLog, msg string) {
 	nowDate := time.Now().Format(dateFormat)
 	if access.oldDate != nowDate {
 		access.lock.Lock()
+		defer access.lock.Unlock()
 		access.oldDate = nowDate
 		access.fd.Close()
 		err := os.Rename(access.logfile, access.logfile+nowDate)
@@ -195,7 +196,6 @@ func outputAccess(access *AccessLog, msg string) {
 		requestWriter := createAccessLogger(access.logfile)
 		access.fd = requestWriter
 		access.logger = log.New(requestWriter, "", log.LstdFlags)
-		access.lock.Unlock()
 	}
 
 	access.logger.Output(3, msg)
