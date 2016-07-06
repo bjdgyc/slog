@@ -187,9 +187,10 @@ func outputAccess(access *AccessLog, msg string) {
 	if access.oldDate != nowDate {
 		access.lock.Lock()
 		defer access.lock.Unlock()
+		oldDate := access.oldDate
 		access.oldDate = nowDate
 		access.fd.Close()
-		err := os.Rename(access.logfile, access.logfile+access.oldDate)
+		err := os.Rename(access.logfile, access.logfile+oldDate)
 		if err != nil {
 			Error(err)
 		}
