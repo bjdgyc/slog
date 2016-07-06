@@ -189,7 +189,7 @@ func outputAccess(access *AccessLog, msg string) {
 		defer access.lock.Unlock()
 		access.oldDate = nowDate
 		access.fd.Close()
-		err := os.Rename(access.logfile, access.logfile+nowDate)
+		err := os.Rename(access.logfile, access.logfile+access.oldDate)
 		if err != nil {
 			Error(err)
 		}
