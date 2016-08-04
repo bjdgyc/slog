@@ -1,6 +1,8 @@
 package main
 
-import "github.com/bjdgyc/slog"
+import (
+	"gopkg.in/bjdgyc/slog.v1"
+)
 
 func main() {
 	//设置日志等级
