@@ -1,4 +1,4 @@
-package slog
+package slog // import "gopkg.in/bjdgyc/slog.v1"
 
 import (
 	"fmt"

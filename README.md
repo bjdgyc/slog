@@ -13,7 +13,7 @@ simple log
 
 ## Installation
 
-`go get github.com/bjdgyc/slog`
+`go get gopkg.in/bjdgyc/slog.v1`
 
 
 ## example
@@ -22,7 +22,7 @@ simple log
 
 package main
 
-import "github.com/bjdgyc/slog"
+import "gopkg.in/bjdgyc/slog.v1"
 
 func main() {
 	//设置日志等级
