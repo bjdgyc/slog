@@ -1,7 +1,8 @@
-package slog // import "gopkg.in/bjdgyc/slog.v1"
+package slog
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -30,13 +31,13 @@ var levelName = map[string]LogLevel{
 var (
 	maxLogLevel = DEBUG
 	logflag     = log.LstdFlags | log.Lshortfile
-	logout      *log.Logger
-	logAccess   = make(map[string]*AccessLog)
+	cuted       = false
 	dateFormat  = "2006-01-02"
+	logStd      = newWrite(os.Stdout, "")
 )
 
-// request 按天分割日志
-type AccessLog struct {
+// log日志
+type Logger struct {
 	lock    sync.Mutex
 	oldDate string
 	logfile string
@@ -44,31 +45,23 @@ type AccessLog struct {
 	logger  *log.Logger
 }
 
-func init() {
-	logout = log.New(os.Stdout, "", logflag)
-}
-
-func SetLogfile(outfile string) {
-	fileWriter, err := os.OpenFile(outfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
-	if err != nil {
-		Fatal(outfile, err)
-	}
-	logout = log.New(fileWriter, "", logflag)
-}
-
 // 设置Access对象
-func SetAccessFile(name, accessFile string) {
-	accessWriter := createAccessLogger(accessFile)
-	access := &AccessLog{
-		logfile: accessFile,
-		fd:      accessWriter,
+func New(file, prefix string) *Logger {
+	Writer := createLogger(file)
+	return newWrite(Writer, prefix)
+}
+
+func newWrite(Writer io.Writer, prefix string) *Logger {
+	l := &Logger{
+		logfile: "",
+		fd:      nil,
 		oldDate: time.Now().Format(dateFormat),
 	}
-	access.logger = log.New(accessWriter, "", log.LstdFlags)
-	logAccess[name] = access
+	l.logger = log.New(Writer, prefix, logflag)
+	return l
 }
 
-func createAccessLogger(accessFile string) *os.File {
+func createLogger(accessFile string) *os.File {
 	requestWriter, err := os.OpenFile(accessFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
 	if err != nil {
 		Fatal(accessFile, err)
@@ -90,11 +83,116 @@ func GetLogLevel() LogLevel {
 	return maxLogLevel
 }
 
+func SetCut(cut bool) {
+	cuted = cut
+}
+
+func GetStdLog() *Logger {
+	return logStd
+}
+
+func (l *Logger) Fatal(args ...interface{}) {
+	if FATAL > maxLogLevel {
+		return
+	}
+	l.output("FATAL", fmt.Sprint(args...))
+	os.Exit(1)
+}
+
+func (l *Logger) Fatalf(msg string, args ...interface{}) {
+	if FATAL > maxLogLevel {
+		return
+	}
+	l.output("FATAL", fmt.Sprintf(msg, args...))
+	os.Exit(1)
+}
+
+// Error logs a message to the 'standard' Logger (always)
+func (l *Logger) Error(args ...interface{}) {
+	if ERROR > maxLogLevel {
+		return
+	}
+	l.output("ERROR", fmt.Sprint(args...))
+}
+
+func (l *Logger) Errorf(msg string, args ...interface{}) {
+	if ERROR > maxLogLevel {
+		return
+	}
+	l.output("ERROR", fmt.Sprintf(msg, args...))
+}
+
+// Warn logs a message to the 'standard' Logger if MaxLogLevel is >= WARN
+func (l *Logger) Warn(args ...interface{}) {
+	if WARN > maxLogLevel {
+		return
+	}
+	l.output("WARN", fmt.Sprint(args...))
+}
+
+func (l *Logger) Warnf(msg string, args ...interface{}) {
+	if WARN > maxLogLevel {
+		return
+	}
+	l.output("WARN", fmt.Sprintf(msg, args...))
+}
+
+// Info logs a message to the 'standard' Logger if MaxLogLevel is >= INFO
+func (l *Logger) Info(args ...interface{}) {
+	if INFO > maxLogLevel {
+		return
+	}
+	l.output("INFO", fmt.Sprint(args...))
+}
+
+func (l *Logger) Infof(msg string, args ...interface{}) {
+	if INFO > maxLogLevel {
+		return
+	}
+	l.output("INFO", fmt.Sprintf(msg, args...))
+}
+
+// Trace logs a message to the 'standard' Logger if MaxLogLevel is >= DEBUG
+func (l *Logger) Debug(args ...interface{}) {
+	if DEBUG > maxLogLevel {
+		return
+	}
+	l.output("DEBUG", fmt.Sprint(args...))
+}
+
+func (l *Logger) Debugf(msg string, args ...interface{}) {
+	if DEBUG > maxLogLevel {
+		return
+	}
+	l.output("DEBUG", fmt.Sprintf(msg, args...))
+}
+
+func (l *Logger) output(mode, msg string) {
+	if cuted && l.fd != nil {
+		nowDate := time.Now().Format(dateFormat)
+		if l.oldDate != nowDate {
+			l.lock.Lock()
+			defer l.lock.Unlock()
+			oldDate := l.oldDate
+			l.oldDate = nowDate
+			l.fd.Close()
+			err := os.Rename(l.logfile, l.logfile+oldDate)
+			if err != nil {
+				Error(err)
+			}
+			requestWriter := createLogger(l.logfile)
+			l.fd = requestWriter
+			l.logger = log.New(requestWriter, "", log.LstdFlags)
+		}
+	}
+	l.logger.Output(3, "["+mode+"] "+msg)
+}
+
 func Fatal(args ...interface{}) {
 	if FATAL > maxLogLevel {
 		return
 	}
-	output("FATAL", fmt.Sprint(args...))
+	logStd.output("FATAL", fmt.Sprint(args...))
 	os.Exit(1)
 }
 
@@ -102,7 +200,7 @@ func Fatalf(msg string, args ...interface{}) {
 	if FATAL > maxLogLevel {
 		return
 	}
-	output("FATAL", fmt.Sprintf(msg, args...))
+	logStd.output("FATAL", fmt.Sprintf(msg, args...))
 	os.Exit(1)
 }
 
@@ -111,14 +209,14 @@ func Error(args ...interface{}) {
 	if ERROR > maxLogLevel {
 		return
 	}
-	output("ERROR", fmt.Sprint(args...))
+	logStd.output("ERROR", fmt.Sprint(args...))
 }
 
 func Errorf(msg string, args ...interface{}) {
 	if ERROR > maxLogLevel {
 		return
 	}
-	output("ERROR", fmt.Sprintf(msg, args...))
+	logStd.output("ERROR", fmt.Sprintf(msg, args...))
 }
 
 // Warn logs a message to the 'standard' Logger if MaxLogLevel is >= WARN
@@ -126,14 +224,14 @@ func Warn(args ...interface{}) {
 	if WARN > maxLogLevel {
 		return
 	}
-	output("WARN", fmt.Sprint(args...))
+	logStd.output("WARN", fmt.Sprint(args...))
 }
 
 func Warnf(msg string, args ...interface{}) {
 	if WARN > maxLogLevel {
 		return
 	}
-	output("WARN", fmt.Sprintf(msg, args...))
+	logStd.output("WARN", fmt.Sprintf(msg, args...))
 }
 
 // Info logs a message to the 'standard' Logger if MaxLogLevel is >= INFO
@@ -141,14 +239,14 @@ func Info(args ...interface{}) {
 	if INFO > maxLogLevel {
 		return
 	}
-	output("INFO", fmt.Sprint(args...))
+	logStd.output("INFO", fmt.Sprint(args...))
 }
 
 func Infof(msg string, args ...interface{}) {
 	if INFO > maxLogLevel {
 		return
 	}
-	output("INFO", fmt.Sprintf(msg, args...))
+	logStd.output("INFO", fmt.Sprintf(msg, args...))
 }
 
 // Trace logs a message to the 'standard' Logger if MaxLogLevel is >= DEBUG
@@ -156,48 +254,12 @@ func Debug(args ...interface{}) {
 	if DEBUG > maxLogLevel {
 		return
 	}
-	output("DEBUG", fmt.Sprint(args...))
+	logStd.output("DEBUG", fmt.Sprint(args...))
 }
 
 func Debugf(msg string, args ...interface{}) {
 	if DEBUG > maxLogLevel {
 		return
 	}
-	output("DEBUG", fmt.Sprintf(msg, args...))
-}
-
-func Access(name string, args ...interface{}) {
-	var (
-		access *AccessLog
-		ok     bool
-	)
-	if access, ok = logAccess[name]; !ok {
-		return
-	}
-
-	outputAccess(access, fmt.Sprint(args...))
-}
-
-func output(mode, msg string) {
-	logout.Output(3, "["+mode+"] "+msg)
-}
-
-func outputAccess(access *AccessLog, msg string) {
-	nowDate := time.Now().Format(dateFormat)
-	if access.oldDate != nowDate {
-		access.lock.Lock()
-		defer access.lock.Unlock()
-		oldDate := access.oldDate
-		access.oldDate = nowDate
-		access.fd.Close()
-		err := os.Rename(access.logfile, access.logfile+oldDate)
-		if err != nil {
-			Error(err)
-		}
-		requestWriter := createAccessLogger(access.logfile)
-		access.fd = requestWriter
-		access.logger = log.New(requestWriter, "", log.LstdFlags)
-	}
-
-	access.logger.Output(3, msg)
+	logStd.output("DEBUG", fmt.Sprintf(msg, args...))
 }
